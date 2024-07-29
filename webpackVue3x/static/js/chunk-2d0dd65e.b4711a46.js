@@ -1,0 +1,1 @@
+(window["webpackJsonp"]=window["webpackJsonp"]||[]).push([["chunk-2d0dd65e"],{"80e5":function(e,n,t){"use strict";t.r(n);t("2b12");var u=t("c553"),c=Object(u["defineComponent"])({__name:"Setup",setup(e){return(e,n)=>null}});const o=c;n["default"]=o}}]);
