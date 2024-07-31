@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>桃花亭</title>
+    <style>
+        canvas{
+            display: block;
+        }
+        body {
+            margin: 0;
+            overscroll-behavior: none;
+        }
+        #btns{
+            position: absolute;
+            top:10%;
+            width: 500px;
+            height: 100px;
+            left: 50%;
+            transform:translateX(-50%);
+        }
+    </style>
+</head>
+<body>
+<div id="btns"></div>
+
+<!-- Import maps polyfill -->
+<!-- Remove this when import maps will be widely supported -->
+<!-- <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script> -->
+
+<script type="importmap">
+			{
+				"imports": {
+					"three": "./three.module.js"
+				}
+			}
+		</script>
+<script type="module">
+    import * as THREE from './three.module.js';
+    import {OrbitControls} from "./OrbitControls.js";
+    import {GLTFLoader} from "./GLTFLoader.js";
+    import {Water} from "./Water2.js";
+    
+
+    import {RenderPass} from "./RenderPass.js";
+    import {UnrealBloomPass} from "./UnrealBloomPass.js";
+    import {EffectComposer} from "./EffectComposer.js";
+    import {ShaderPass} from "./ShaderPass.js";
+
+
+    let scene,renderer,camera,orbitControls;
+
+    let bloomLayer,darkMaterial;
+
+    let composer,finalPass,finalComposer;
+
+    let materials = {};
+
+    let loader;
+
+    let mixers = [];
+    let actions = {};
+
+    let params = {
+        aPower:0.14, //中心光圈强度
+        bPower:1.74, //边缘光圈强度
+        aSize:0.27, //总的光点大小
+        aColor:'#ffffff', //荧光颜色
+        aCenter: new THREE.Vector2(0.5,0.5),//光点中心
+        wRadius: 0, //白色区域半径
+        wPower: 2, //白色区域强度
+        aTest:0,//透明度测试
+    }
+
+    function init(){
+        scene = new THREE.Scene();
+        renderer = new THREE.WebGLRenderer({
+            antialias:true
+        });
+        renderer.setSize(window.innerWidth,window.innerHeight);
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.3;
+
+        document.body.appendChild(renderer.domElement);
+        camera = new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.01,50000);
+        camera.position.set(10,10,10);
+        orbitControls = new OrbitControls(camera,renderer.domElement);
+        orbitControls.enableDamping = true;
+        orbitControls.maxDistance = 30;
+        orbitControls.minDistance = 10;
+        orbitControls.maxPolarAngle = Math.PI/2;
+        loader = new GLTFLoader();
+
+        bloomLayer = new THREE.Layers();
+        bloomLayer.set(1);
+        darkMaterial = new THREE.MeshBasicMaterial( { color: 'black' } );
+    }
+
+    function addComposer(){
+        let renderScene = new RenderPass(scene,camera);
+
+        //后处理合成第二步,添加bloom通道
+        let bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth,window.innerHeight),
+            1.5, 0.4,0.85
+        );
+
+        let bloom = {
+            strength: 3.0,
+            threshold: 0.4,
+            radius: 1.0
+        }
+
+        bloomPass.threshold = bloom.threshold;
+        bloomPass.strength = bloom.strength;
+        bloomPass.radius = bloom.radius;
+
+        //添加后处理到合成器上
+        composer = new EffectComposer( renderer );
+        composer.renderToScreen = false;
+        composer.addPass( renderScene );
+        composer.addPass( bloomPass );
+
+        finalPass = new ShaderPass(new THREE.ShaderMaterial({
+            uniforms:{
+                baseTexture:{value:null},
+                bloomTexture:{value:composer.renderTarget2.texture}
+            },
+            vertexShader: `
+                //用于局部辉光的顶点着色器
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D baseTexture;//正常渲染出来的图片
+                uniform sampler2D bloomTexture;//辉光图片
+                varying vec2 vUv;
+                void main() {
+                    //对两种图片进行合成
+                    gl_FragColor = ( texture2D( baseTexture, vUv ) + vec4( 1.0 ) * texture2D( bloomTexture, vUv ) );
+                }
+            `,
+            defines: {}
+        }),'baseTexture');
+        finalPass.needsSwap = true;
+
+        finalComposer = new EffectComposer(renderer);
+        finalComposer.addPass(renderScene);
+        finalComposer.addPass(finalPass);
+    }
+
+
+    function addMesh(){
+        loader.load('./thy.glb',gltf=>{
+            let model = gltf.scene;
+
+
+            model.traverse(object=>{
+                if(object.isMesh){
+                    object.material.transparent = true;
+                    object.material.alphaTest = 0.1;
+                    object.material.side = THREE.DoubleSide;
+                }
+
+                if(object.name.indexOf('denglong') !== -1){
+                    if(object.isMesh){
+                        object.material = object.material.clone();
+                        object.material.emissive = new THREE.Color("#ff2929");
+                        object.material.emissiveIntensity = 0.53;
+                        object.layers.enable(1);
+                    }
+                }
+            })
+
+            scene.add(model);
+        })
+    }
+
+    function addMoon() {
+        let geometry = new THREE.SphereGeometry(5,32,32);
+        let material = new THREE.MeshBasicMaterial({
+            color:0xffffff
+        });
+        let mesh = new THREE.Mesh(geometry,material);
+        scene.add(mesh);
+
+        mesh.layers.enable(1);
+
+        mesh.position.set(100,100,100);
+
+        let pointLight = new THREE.PointLight(0xffffff,0.5);
+        mesh.add(pointLight);
+
+        let waterGeometry = new THREE.PlaneGeometry(30,30);
+
+        let water = new Water(waterGeometry,{
+            color: 0xffffff,
+            scale: 1,
+            flowDirection: new THREE.Vector2( 1, 1 ),
+            textureWidth: 1024,
+            textureHeight: 1024,
+        });
+        water.rotation.x = -Math.PI/2;
+        water.position.y = -0.39;
+        scene.add(water);
+    }
+
+    function addStar(){
+        let spherical = new THREE.Spherical(500);
+
+        let array = [];
+        for(let i = 0;i< 500;i++){
+
+            let phi = Math.random() * Math.PI*2 - Math.PI;
+            let theta = Math.random() * Math.PI*2 - Math.PI;
+
+            spherical.phi = phi;
+            spherical.theta = theta;
+
+            let vec3 = new THREE.Vector3().setFromSpherical(spherical);
+
+            let x = vec3.x;
+            let y = vec3.y;
+            let z = vec3.z;
+            array.push(x,y,z);
+        }
+        let vertices = new Float32Array(array);
+        let geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position',new THREE.BufferAttribute(vertices,3));
+
+        // let geometry = new THREE.SphereGeometry(5,32,32);
+
+        let material = new THREE.ShaderMaterial({
+            uniforms : {
+                aPower:{
+                    value : params.aPower,//中心光圈的强度，取值范围不限，但是超过0.5就基本不透明
+                },
+                bPower:{
+                    value : params.bPower,//边缘光圈的强度，取值范围不限，建议取值在0~10之间
+                },
+                aSize:{
+                    value: params.aSize,//荧光区域半径，单位为像素，与threeJS同单位
+                },
+                aColor:{
+                    value:new THREE.Color(params.aColor)//荧光颜色
+                },
+                aCenter:{
+                    value:params.aCenter,//荧光圆心，xy取值范围均为0~1
+                },
+                wRadius:{
+                    value:params.wRadius,//白色区域半径
+                },
+                wPower:{
+                    value:params.wPower,//白色区域强度
+                },
+                aTest: {
+                    value:params.aTest
+                }
+            },
+            vertexShader: `
+                    uniform float aSize;
+                    varying vec2 vUv;
+                    void main(){
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                        gl_PointSize = aSize * 100.0;
+                    }
+            `,
+            fragmentShader: `
+                    uniform float aPower;
+                    uniform float bPower;
+                    uniform vec3 aColor;
+                    uniform vec2 aCenter;
+                    uniform float wRadius;
+                    uniform float wPower;
+                    uniform float aTest;
+                    varying vec2 vUv;
+
+                    void main(){
+                        float dist = distance(gl_PointCoord,aCenter);
+                        float bp = bPower / 100.0;
+                        if(dist < 0.5){
+                            float alp = pow( (1.0 - dist),(1.0 / aPower));
+                            if(alp<aTest)discard;
+                            vec4 fColor = vec4(aColor,alp / bp);
+                            fColor.rgb *= pow( wRadius + alp ,wPower);
+                            gl_FragColor = vec4(fColor.rgb,alp);
+                        }else{
+                            discard;
+                        }
+                    }
+            `,
+            transparent:true,
+            blending: THREE.AdditiveBlending
+        });
+        let points = new THREE.Points(geometry,material);
+        points.renderOrder = 1;
+        scene.add(points);
+    }
+
+    function addLight(){
+        let geometry = new THREE.SphereGeometry(0.1,32,32);
+        let material = new THREE.MeshBasicMaterial({
+            color:"#fec371"
+        });
+        let mesh = new THREE.Mesh(geometry,material);
+        scene.add(mesh);
+        mesh.position.set(1.31,2.68,2.62)
+
+        mesh.layers.enable(1);
+
+        let pointLight = new THREE.PointLight("#fec371",0.7);
+        mesh.add(pointLight);
+    }
+
+    function addGirl(){
+        loader.load('./shaonv.glb',gltf=>{
+            let model = gltf.scene;
+            scene.add(model);
+            model.scale.setScalar(0.8)
+            model.traverse(object=>{
+                if(object.isMesh){
+                    object.material.transparent = true;
+                    object.material.alphaTest = 0.1;
+                    object.material.side = THREE.DoubleSide;
+                }
+            });
+
+            model.position.set(-2,3.98,-0.03);
+            model.rotation.y = 0.96;
+            console.log(gltf);
+
+
+            let mixer = new THREE.AnimationMixer(model.children[0]);
+            actions.object1 = mixer.clipAction(gltf.animations[0]);
+            actions.object1.play();
+
+            mixers.push(mixer);
+
+        })
+    }
+
+    let clock = new THREE.Clock();
+    function render(){
+        scene.traverse(obj=>{
+            if ( obj.isMesh && bloomLayer.test( obj.layers ) === false ) {
+                if(!obj.isWater){
+                    materials[ obj.uuid ] = obj.material;
+                    obj.material = darkMaterial;
+                }
+            }
+        });//先替换掉不需要渲染辉光的元素,替换为黑色材质
+        composer.render();
+        scene.traverse(obj=>{
+            if ( materials[ obj.uuid ] ) {
+                obj.material = materials[ obj.uuid ];
+                delete materials[ obj.uuid ];
+            }
+        });
+
+        for(let i = 0;i < mixers.length;i++){
+            mixers[i].update(clock.getDelta());
+        }
+
+        finalComposer.render();
+        orbitControls.update();
+        requestAnimationFrame(render);
+    }
+
+    init();
+    addComposer();
+    addMesh();
+    addMoon();
+    addStar();
+    addLight();
+    addGirl();
+    render();
+</script>
+</body>
+</html>
