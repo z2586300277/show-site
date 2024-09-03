@@ -9,4 +9,6 @@
 - webpackVue3x:(2020 - 2021) https://z2586300277.github.io/show-site/webpackVue3x
 
 - 幻梦丶海炎 - 桃花亭 - https://z2586300277.github.io/show-site/TaoHuaTing
+
+- 3d 地球 - https://z2586300277.github.io/show-site/3dEarth
   
