@@ -17,3 +17,5 @@
 - 汽车 - - https://z2586300277.github.io/show-site/su7_car
   
 - 音乐 - https://z2586300277.github.io/show-site/music_wobble
+
+- 自定义后期处理 -  https://z2586300277.github.io/show-site/customEffect
