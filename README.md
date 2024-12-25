@@ -19,3 +19,5 @@
 - 音乐 - https://z2586300277.github.io/show-site/music_wobble
 
 - 自定义后期处理 -  https://z2586300277.github.io/show-site/customEffect
+
+- 噪声网格 - https://z2586300277.github.io/show-site/nosie_gird
