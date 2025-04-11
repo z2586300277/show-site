@@ -25,3 +25,5 @@
 - fire - https://z2586300277.github.io/show-site/fire
 
 - dissolve - https://z2586300277.github.io/show-site/dissolve
+
+- autopilot - https://z2586300277.github.io/show-site/autopilot
